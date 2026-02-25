@@ -10,6 +10,7 @@
 class LoginWidget;
 class OperateWidget;
 class AgentClient;
+class ChatWidget;
 
 class RoomMainWidget : public QWidget, public bytertc::IRTCRoomEventHandler, public bytertc::IRTCEngineEventHandler {
     Q_OBJECT
@@ -103,4 +104,5 @@ private:
     QList<VideoWidget *> m_videoWidgetList;
     QMap<QString, VideoWidget *> m_activeWidgetMap;
     QWidget *m_lightIndicator = nullptr;
+    QSharedPointer<ChatWidget> m_chatWidget;
 };

@@ -291,6 +291,18 @@ void AgentClient::handleMessage(const QString &topic, const QString &payload) {
                 qDebug() << "Received destroySession notification from agent";
                 emit voiceChatStopped();
             }
+            else if (method == "textTalkDelta") {
+                auto params = json.value("params", nlohmann::json::object());
+                QString delta = QString::fromStdString(params.value("textDelta", ""));
+                if (!delta.isEmpty()) {
+                    qDebug() << "Received textTalkDelta:" << delta;
+                    emit textDeltaReceived(delta);
+                }
+            }
+            else if (method == "textTalkFinished") {
+                qDebug() << "Received textTalkFinished";
+                emit textFinished();
+            }
         }
 
     } catch (const std::exception &e) {
@@ -403,6 +415,21 @@ void AgentClient::sendDestroySession() {
     mcp_mqtt::JsonRpcNotification notif =
         mcp_mqtt::JsonRpcNotification::create("destroySession", nlohmann::json::object());
 
+    publishToAgent(notif.toJson());
+}
+
+void AgentClient::sendTextTalk(const QString &text) {
+    std::string taskId = "text-" + std::to_string(m_nextTaskId++);
+
+    nlohmann::json params = {
+        {"taskId", taskId},
+        {"text", text.toStdString()}
+    };
+
+    mcp_mqtt::JsonRpcNotification notif =
+        mcp_mqtt::JsonRpcNotification::create("textTalk", params);
+
+    qDebug() << "Sending textTalk, taskId=" << taskId.c_str() << ", text=" << text;
     publishToAgent(notif.toJson());
 }
 

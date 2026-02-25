@@ -7,6 +7,7 @@
 #include <vector>
 #include <QTimer>
 #include "VideoWidget.h"
+#include "ChatWidget.h"
 #include <QMessageBox>
 
 /**
@@ -91,7 +92,11 @@ void RoomMainWidget::setupView() {
         "}");
     m_lightIndicator->setToolTip(QStringLiteral(u"灯"));
     m_lightIndicator->raise();
+    m_lightIndicator->setVisible(false);
 
+    // 创建文本聊天面板（浮动在窗口右侧）
+    m_chatWidget = QSharedPointer<ChatWidget>::create(this);
+    m_chatWidget->setVisible(false);
     toggleShowFloatWidget(false);
     ui.sdkVersionLabel->setText(QStringLiteral(u"VolcEngineRTC v") + QString(bytertc::IRTCEngine::getSDKVersion()));
 }
@@ -165,6 +170,25 @@ void RoomMainWidget::slotOnStartVoiceChat(const QString &brokerUrl, const QStrin
         }
     });
 
+    // 文本聊天信号连接（先断开旧连接，防止重复）
+    disconnect(m_chatWidget.get(), &ChatWidget::sigSendText, nullptr, nullptr);
+    connect(m_chatWidget.get(), &ChatWidget::sigSendText,
+            this, [this](const QString &text) {
+        if (m_agentClient && m_agentClient->isConnected()) {
+            m_agentClient->sendTextTalk(text);
+        }
+    });
+
+    connect(m_agentClient, &AgentClient::textDeltaReceived,
+            this, [this](const QString &delta) {
+        m_chatWidget->appendAgentDelta(delta);
+    });
+
+    connect(m_agentClient, &AgentClient::textFinished,
+            this, [this]() {
+        m_chatWidget->finishAgentMessage();
+    });
+
     m_agentClient->start(brokerUrl, agentId, clientId);
 }
 
@@ -233,6 +257,7 @@ void RoomMainWidget::toggleShowFloatWidget(bool isEnterRoom) {
     m_operateWidget->setVisible(isEnterRoom);
     ui.roomIdLabel->setVisible(isEnterRoom);
     m_lightIndicator->setVisible(isEnterRoom);
+    m_chatWidget->setVisible(isEnterRoom);
 }
 
 void RoomMainWidget::slotOnHangup() {
@@ -250,6 +275,9 @@ void RoomMainWidget::slotOnHangup() {
             "  border: 3px solid #777777;"
             "}");
     }
+
+    // 清空聊天记录
+    m_chatWidget->clearChat();
 
     // 停止 MQTT 智能体客户端（发送 stopVoiceChat + destroySession）
     if (m_agentClient) {

@@ -45,6 +45,11 @@ public:
      */
     void stop();
 
+    /**
+     * 向智能体发送文本消息（textTalk 通知）
+     */
+    void sendTextTalk(const QString &text);
+
     bool isConnected() const;
 
 signals:
@@ -54,6 +59,8 @@ signals:
     void voiceChatStopped();
     void errorOccurred(const QString &error);
     void lightStateChanged(bool on);
+    void textDeltaReceived(const QString &delta);
+    void textFinished();
 
 private slots:
     void handleMessage(const QString &topic, const QString &payload);
@@ -82,4 +89,5 @@ private:
     std::string m_initSessionId;
     std::string m_startVoiceChatId;
     std::string m_stopVoiceChatId;
+    int64_t m_nextTaskId = 1;
 };
