@@ -84,15 +84,16 @@ public:
         inMsg.retained = msg->is_retained();
 
         const auto& props = msg->get_properties();
-        if (props.contains(mqtt::property::USER_PROPERTY)) {
-            try {
-                auto userProps = mqtt::get<std::vector<mqtt::string_pair>>(
-                    props, mqtt::property::USER_PROPERTY);
-                for (const auto& prop : userProps) {
-                    inMsg.userProperties[std::string(std::get<0>(prop))] =
-                        std::string(std::get<1>(prop));
-                }
-            } catch (...) {}
+        // 使用 C 层 API 直接遍历属性，避免 mqtt::get 模板的版本兼容问题
+        const auto& cProps = props.c_struct();
+        for (int i = 0; i < cProps.count; ++i) {
+            if (cProps.array[i].identifier == MQTTPROPERTY_CODE_USER_PROPERTY) {
+                std::string key(cProps.array[i].value.data.data,
+                                cProps.array[i].value.data.len);
+                std::string val(cProps.array[i].value.value.data,
+                                cProps.array[i].value.value.len);
+                inMsg.userProperties[key] = val;
+            }
         }
 
         handler(inMsg);
