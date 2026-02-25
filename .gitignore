@@ -61,5 +61,4 @@ config.json
 # Generated Qt resources
 *.rcc
 
-Resources/
 VolcEngineRTC_arm64/

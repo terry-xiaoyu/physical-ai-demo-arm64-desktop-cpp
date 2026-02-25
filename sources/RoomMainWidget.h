@@ -8,8 +8,8 @@
 #include "bytertc_room_event_handler.h"
 
 class LoginWidget;
-
 class OperateWidget;
+class AgentClient;
 
 class RoomMainWidget : public QWidget, public bytertc::IRTCRoomEventHandler, public bytertc::IRTCEngineEventHandler {
     Q_OBJECT
@@ -42,9 +42,18 @@ protected:
 
 public
     slots:
-            void slotOnEnterRoom(
-    const QString &roomID,
-    const QString &userID
+            void slotOnStartVoiceChat(
+    const QString &brokerUrl,
+    const QString &agentId,
+    const QString &clientId
+    );
+
+    void slotOnVoiceChatReady(
+    const QString &appId,
+    const QString &roomId,
+    const QString &token,
+    const QString &userId,
+    const QString &targetUserId
     );
 
     void slotOnHangup();
@@ -84,8 +93,10 @@ private:
     QPoint m_prevGlobalPoint;
     QSharedPointer <LoginWidget> m_loginWidget;
     QSharedPointer <OperateWidget> m_operateWidget;
+    AgentClient *m_agentClient = nullptr;
     bytertc::IRTCEngine* m_rtc_video = nullptr;
     bytertc::IRTCRoom* m_rtc_room = nullptr;
+    std::string m_appId;
     std::string m_uid;
     std::string m_roomId;
     bool m_isInRoom = false;

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.14)
 
 project(QuickStart)
 
@@ -40,6 +40,12 @@ set(CONFIG_FILE "${CMAKE_SOURCE_DIR}/config.json")
 
 find_package(Qt5 COMPONENTS Widgets Core Gui Network REQUIRED)
 find_package(OpenSSL REQUIRED)
+find_package(PahoMqttCpp REQUIRED)
+
+# mcp-over-mqtt-cpp-sdk (提供 JSON-RPC 工具类和 MQTT 接口定义)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(MCP_MQTT_SDK_DIR "${CMAKE_SOURCE_DIR}/../mcp-over-mqtt-cpp-sdk")
+add_subdirectory(${MCP_MQTT_SDK_DIR} ${CMAKE_BINARY_DIR}/mcp-over-mqtt-cpp-sdk)
 
 #link VolcEngineRTC lib
 include_directories(${CMAKE_SOURCE_DIR})
@@ -75,7 +81,7 @@ IF (BYTERTC_LINUX)
 target_link_directories(${PROJECT_NAME} PUBLIC ${BYTERTC_SDK_DIR}/lib/)
 set(CMAKE_PREFIX_PATH $ENV{QTDIR}/lib/cmake) #don't forget to set env path QTDIR
 target_link_options(${PROJECT_NAME} PUBLIC -Wl,-rpath-link=${BYTERTC_SDK_DIR}/lib/libVolcEngineRTC.so)
-set(CMAKE_CXX_FLAGS "-ggdb -std=c++14 -fPIC -pthread")
+set(CMAKE_CXX_FLAGS "-ggdb -std=c++17 -fPIC -pthread")
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-rpath='$ORIGIN'")
 ENDIF ()
 
@@ -99,6 +105,8 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
         pulse-simple pulse
         atomic
         OpenSSL::Crypto
+        mcp_mqtt_server
+        PahoMqttCpp::paho-mqttpp3
         )
 
 set(DST_DIR "${PROJECT_BINARY_DIR}")

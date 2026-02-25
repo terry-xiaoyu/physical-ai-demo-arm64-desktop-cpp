@@ -14,9 +14,9 @@ protected:
     //void paintEvent(QPaintEvent *event)override;
 private
     slots:
-            void on_enterRoomBtn_clicked();
+            void on_startVoiceChatBtn_clicked();
     signals:
-            void sigEnterRoom(const QString &, const QString &);
+            void sigStartVoiceChat(const QString &brokerUrl, const QString &agentId, const QString &clientId);
 private:
     Ui::LoginForm ui;
 };

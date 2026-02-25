@@ -2,13 +2,12 @@
 #include "RoomMainWidget.h"
 #include "LoginWidget.h"
 #include "OperateWidget.h"
-#include "Constants.h"
+#include "AgentClient.h"
 #include <QDebug>
 #include <vector>
 #include <QTimer>
 #include "VideoWidget.h"
 #include <QMessageBox>
-#include "TokenGenerator/TokenGenerator.h"
 
 /**
  * VolcEngineRTC 视频通话的主页面
@@ -106,16 +105,47 @@ void RoomMainWidget::mouseReleaseEvent(QMouseEvent *event) {
     m_bLeftBtnPressed = false;
 }
 
-void RoomMainWidget::slotOnEnterRoom(const QString &roomID, const QString &userID) {
-    m_uid = userID.toStdString();
-    m_roomId = roomID.toStdString();
-    ui.roomIdLabel->setText(m_roomId.c_str());
+void RoomMainWidget::slotOnStartVoiceChat(const QString &brokerUrl, const QString &agentId, const QString &clientId) {
     toggleShowFloatWidget(true);
 
-    // 创建引擎
+    m_agentClient = new AgentClient(this);
+
+    connect(m_agentClient, &AgentClient::voiceChatReady,
+            this, &RoomMainWidget::slotOnVoiceChatReady);
+
+    connect(m_agentClient, &AgentClient::voiceChatStopped,
+            this, &RoomMainWidget::slotOnHangup);
+
+    connect(m_agentClient, &AgentClient::errorOccurred,
+            this, [this](const QString &error) {
+        QMessageBox::warning(this, QStringLiteral(u"错误"), error, QStringLiteral(u"确定"));
+        if (!m_isInRoom) {
+            toggleShowFloatWidget(false);
+            if (m_agentClient) {
+                m_agentClient->deleteLater();
+                m_agentClient = nullptr;
+            }
+        }
+    });
+
+    m_agentClient->start(brokerUrl, agentId, clientId);
+}
+
+void RoomMainWidget::slotOnVoiceChatReady(const QString &appId, const QString &roomId,
+                                           const QString &token, const QString &userId,
+                                           const QString &targetUserId) {
+    // 使用服务端返回的 targetUserId 作为本端的 userId
+    m_uid = targetUserId.toStdString();
+    m_roomId = roomId.toStdString();
+    m_appId = appId.toStdString();
+    std::string tokenStr = token.toStdString();
+
+    ui.roomIdLabel->setText(roomId);
+
+    // 创建引擎（使用服务端返回的 appId）
     bytertc::EngineConfig config;
-	config.app_id = Constants::APP_ID.c_str();
-	config.parameters = "";
+    config.app_id = m_appId.c_str();
+    config.parameters = "";
     m_rtc_video = bytertc::IRTCEngine::createRTCEngine(config, this);
     if (m_rtc_video == nullptr) {
         qWarning() << "create engine failed";
@@ -152,12 +182,13 @@ void RoomMainWidget::slotOnEnterRoom(const QString &roomID, const QString &userI
     roomConfig.is_auto_subscribe_audio = true;
     roomConfig.is_auto_subscribe_video = true;
     roomConfig.room_profile_type = bytertc::kRoomProfileTypeCommunication;
-    // 加入房间
-    std::string token = TokenGenerator::generate(Constants::APP_ID, Constants::APP_KEY, m_roomId, m_uid);
-    m_rtc_room->joinRoom(token.c_str(), userInfo, true, roomConfig);
+    // 加入房间（使用服务端返回的 token，targetUserId 作为本端 uid）
+    m_rtc_room->joinRoom(tokenStr.c_str(), userInfo, true, roomConfig);
     m_isInRoom = true;
 
-    qDebug() << "joinroom, token:" << token.c_str() << ",uid:" << userInfo.uid << ",roomid:" << m_roomId.c_str();
+    qDebug() << "joinRoom: appId=" << m_appId.c_str()
+             << ", roomId=" << m_roomId.c_str()
+             << ", uid(targetUserId)=" << m_uid.c_str();
 }
 
 void RoomMainWidget::toggleShowFloatWidget(bool isEnterRoom) {
@@ -171,6 +202,14 @@ void RoomMainWidget::slotOnHangup() {
     m_isInRoom = false;
 
     toggleShowFloatWidget(false);
+
+    // 停止 MQTT 智能体客户端（发送 stopVoiceChat + destroySession）
+    if (m_agentClient) {
+        m_agentClient->stop();
+        m_agentClient->deleteLater();
+        m_agentClient = nullptr;
+    }
+
     if (m_rtc_room) {
         // 先摘除回调，阻止 SDK 线程继续派发新的事件到 this
         m_rtc_room->setRTCRoomEventHandler(nullptr);

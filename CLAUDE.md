@@ -4,11 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Qt5-based desktop video conferencing application for Linux ARM64 (aarch64) that uses the VolcEngineRTC SDK. It supports up to 4 simultaneous video participants (1 local + 3 remote).
+This is a Qt5-based desktop video conferencing application for Linux ARM64 (aarch64) that uses the VolcEngineRTC SDK. It connects to an AI agent via MQTT, initiates a voice chat session, and uses server-returned parameters (appId, roomId, token, userId, targetUserId) to join the RTC room.
 
 **Target Platform**: Linux aarch64 (ARM64)
 **SDK Version**: VolcEngineRTC 3.60.103.4700
 **UI Framework**: Qt5 (Widgets, Core, Gui, Network)
+**MQTT Protocol**: Client-Agent message protocol (see specs/client_agent_message_protocol.md)
+**Dependencies**: Paho MQTT C++, nlohmann/json, mcp-over-mqtt-cpp-sdk
 
 ## Build Commands
 
@@ -44,13 +46,22 @@ This creates an AppImage bundle with all dependencies. Requires `patchelf` and `
 - Manages the RTC engine lifecycle (create, join room, leave, destroy)
 - Implements both `IRTCRoomEventHandler` and `IRTCEngineEventHandler` interfaces
 - Orchestrates video rendering across 4 video widget slots (1 local + 3 remote)
-- Contains LoginWidget and OperateWidget as child widgets
+- Contains LoginWidget, OperateWidget, and AgentClient
 - Handles user join/leave events and dynamically assigns remote users to available video slots
 
+**AgentClient** (sources/AgentClient.h/cpp)
+- MQTT client that implements the client-agent message protocol
+- Connects to MQTT broker via Paho MQTT C++ (MQTT 5.0)
+- Sends `initializeSession` and `startVoiceChat` JSON-RPC requests to the agent
+- Parses agent responses to extract RTC room parameters (appId, roomId, token, userId, targetUserId)
+- Handles agent notifications (`voiceChatStopped`, `destroySession`)
+- Uses `MqttCallbackBridge` inner class to marshal Paho callbacks to Qt main thread via `QMetaObject::invokeMethod`
+- Uses mcp-over-mqtt-cpp-sdk's `JsonRpcRequest` and `JsonRpcNotification` for message serialization
+
 **LoginWidget** (sources/LoginWidget.h/cpp)
-- Pre-call UI for entering room ID and user ID
-- Validates input against SDK constraints (alphanumeric + `@._-`, max 128 chars)
-- Emits signal to RoomMainWidget to initiate room join
+- Pre-call UI for entering MQTT configuration (Broker URL, Agent ID, Client ID)
+- Validates that all fields are non-empty
+- Emits `sigStartVoiceChat` signal to RoomMainWidget
 
 **OperateWidget** (sources/OperateWidget.h/cpp)
 - In-call control panel for mute/unmute audio/video and hangup
@@ -61,46 +72,53 @@ This creates an AppImage bundle with all dependencies. Requires `patchelf` and `
 - Provides a QWidget whose `winId()` is passed to SDK as native render canvas
 - Tracks active/inactive state for slot assignment
 
-### RTC Engine Integration Flow
+### MQTT + RTC Integration Flow
 
-1. **Engine Creation** (`slotOnEnterRoom`):
-   - Create `IRTCEngine` with app_id from Constants.h
-   - Set video encoder config (360x640@15fps)
-   - Start local audio/video capture
-   - Set local video canvas to `ui.localWidget`
+1. **User Input** (LoginWidget):
+   - User enters MQTT Broker URL, Agent ID, and Client ID
+   - Clicks "开始语音通话" button
 
-2. **Room Join**:
-   - Create `IRTCRoom` via `createRTCRoom()`
-   - Generate token locally using `TokenGenerator::generate()` (app_id + app_key + room_id + user_id)
-   - Join with auto-publish/subscribe enabled
+2. **MQTT Connection** (`slotOnStartVoiceChat`):
+   - Creates `AgentClient` and connects to MQTT broker
+   - Subscribes to `$agent-client/{clientId}/#`
 
-3. **Remote User Handling**:
+3. **Session Initialization** (AgentClient):
+   - Sends `initializeSession` JSON-RPC request to `$agent/{agentId}/{clientId}`
+   - Waits for success response
+
+4. **Voice Chat Start** (AgentClient):
+   - On session initialized, sends `startVoiceChat` request
+   - Agent responds with: `appId`, `roomId`, `token`, `userId`, `targetUserId`
+   - Emits `voiceChatReady` signal
+
+5. **RTC Room Join** (`slotOnVoiceChatReady`):
+   - Creates `IRTCEngine` with server-provided `appId`
+   - Uses `targetUserId` as the local user's `userId` (important!)
+   - Joins room with server-provided `token` and `roomId`
+   - Starts local audio/video capture
+6. **Remote User Handling**:
    - `onFirstRemoteVideoFrameDecoded()` triggers `sigUserEnter` signal
    - Signal handler finds first inactive VideoWidget from `m_videoWidgetList` (max 3)
    - Calls `setRemoteVideoCanvas()` with the widget's `winId()`
    - Maps user_id to VideoWidget in `m_activeWidgetMap` for cleanup on leave
 
-4. **Audio/Video Controls**:
+7. **Audio/Video Controls**:
    - Mute audio: `IRTCRoom::publishStreamAudio(false)`
    - Mute video: `IRTCEngine::stopVideoCapture()`
 
-5. **Cleanup** (`slotOnHangup`):
+8. **Cleanup** (`slotOnHangup`):
+   - Sends `stopVoiceChat` and `destroySession` to agent via AgentClient
+   - Disconnects MQTT
    - `IRTCRoom::leaveRoom()` and `destroy()`
    - `IRTCEngine::destroyRTCEngine()` (static method)
    - Clear all video widget mappings
 
-### Token Generation
-
-The `TokenGenerator` (sources/TokenGenerator/) generates RTC authentication tokens **locally** using OpenSSL. This is for demo purposes only.
-
-**Production deployment must generate tokens server-side** to protect the APP_KEY.
-
 ### Configuration
 
-**sources/Constants.h** contains:
-- `APP_ID`: VolcEngineRTC application identifier
-- `APP_KEY`: Secret key for token generation (hardcoded - change for production)
-- `INPUT_REGEX`: Validation pattern for room/user IDs
+RTC room parameters (appId, roomId, token, userId) are now obtained from the agent server via MQTT.
+The user only needs to provide MQTT Broker URL, Agent ID, and Client ID in the login UI.
+
+`Constants.h` and `TokenGenerator/` have been removed as they are no longer needed.
 
 ## SDK Integration Details
 
@@ -114,22 +132,22 @@ ${BYTERTC_SDK_DIR}/include/game
 ### Linking
 ```cmake
 target_link_libraries(${PROJECT_NAME} PUBLIC
-    Qt5::Widgets
-    Qt5::Network
+    Qt5::Widgets Qt5::Network
     VolcEngineRTC
-    pulse-simple pulse
-    atomic
+    pulse-simple pulse atomic
     OpenSSL::Crypto
+    mcp_mqtt_server
+    PahoMqttCpp::paho-mqttpp3
 )
 ```
 
-The SDK library path is `VolcEngineRTC_arm64/lib/libVolcEngineRTC.so`. The CMakeLists.txt sets rpath to `$ORIGIN` so .so files can be placed alongside the executable.
+The mcp-over-mqtt-cpp-sdk is included via `add_subdirectory(../mcp-over-mqtt-cpp-sdk)`.
 
 ## UI Files
 
 Qt Designer .ui files in `ui/` are auto-processed by CMake:
 - `RoomMainWidget.ui`: Main window layout (title bar, 4 video slots, SDK version label)
-- `LoginWidget.ui`: Room/user input form
+- `LoginWidget.ui`: MQTT configuration form (Broker URL, Agent ID, Client ID)
 - `OperateWidget.ui`: In-call control buttons
 - `VideoWidget.ui`: Single video rendering area
 
@@ -143,6 +161,8 @@ RoomMainWidget uses `Qt::FramelessWindowHint` and implements custom mouse event 
 
 ### Event Handler Threading
 RTC callbacks (`onUserJoined`, `onFirstRemoteVideoFrameDecoded`, etc.) may occur on SDK threads. The code uses Qt signals to marshal back to the main thread for UI updates.
+
+MQTT callbacks from Paho also arrive on internal threads. `AgentClient::MqttCallbackBridge` uses `QMetaObject::invokeMethod(Qt::QueuedConnection)` to forward messages to the Qt main thread.
 
 ### PulseAudio Dependency
 The SDK uses PulseAudio for audio I/O. If audio capture/playback fails, verify `pulseaudio --start` is running.

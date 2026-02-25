@@ -5,15 +5,12 @@
 #include <QMessageBox>
 
 /**
- * VolcEngineRTC 音视频通话入口页面
+ * MQTT 配置与语音通话入口页面
  *
- * 包含如下简单功能：
- * - 该页面用来跳转至音视频通话主页面
- * - 校验房间名和用户名
- * - 展示当前 SDK 使用的版本号 {@link RTCEngine#getSdkVersion()}
- *
- * 有以下常见的注意事项：
- * 1.SDK 对房间名、用户名的限制是：非空且最大长度不超过128位的数字、大小写字母、@ . _ \ -
+ * 包含如下功能：
+ * - 输入 MQTT Broker 地址、智能体 ID、客户端 ID
+ * - 校验输入项非空
+ * - 点击按钮后通过 MQTT 发起语音通话
  */
 
 LoginWidget::LoginWidget(QWidget *parent)
@@ -23,20 +20,21 @@ LoginWidget::LoginWidget(QWidget *parent)
 	setAttribute(Qt::WA_StyledBackground);
 	parent->installEventFilter(this);
 
-	connect(this, SIGNAL(sigEnterRoom(const QString &, const QString &)), parent, SLOT(slotOnEnterRoom(const QString &, const QString &)));
+	connect(this, SIGNAL(sigStartVoiceChat(const QString &, const QString &, const QString &)),
+	        parent, SLOT(slotOnStartVoiceChat(const QString &, const QString &, const QString &)));
 }
 
-bool LoginWidget::eventFilter(QObject *watched, QEvent *event) 
+bool LoginWidget::eventFilter(QObject *watched, QEvent *event)
 {
 	if (watched == parent())
 	{
 		auto parentWindow = dynamic_cast<QWidget*>(parent());
-		if (parentWindow == nullptr) 
+		if (parentWindow == nullptr)
 		{
 			return false;
 		}
-		if (event->type() == QEvent::Resize) 
-		{	
+		if (event->type() == QEvent::Resize)
+		{
 			//update login geometry
 			auto selfRect = this->rect();
 			auto parentGem = parentWindow->rect();
@@ -47,56 +45,31 @@ bool LoginWidget::eventFilter(QObject *watched, QEvent *event)
 	return false;
 }
 
-void LoginWidget::on_enterRoomBtn_clicked() 
+void LoginWidget::on_startVoiceChatBtn_clicked()
 {
-	
-	auto checkStr = [=](const QString &typeName, const QString &str)->bool
+	auto checkNotEmpty = [=](const QString &typeName, const QString &str) -> bool
 	{
-		if (str.isEmpty()) 
+		if (str.trimmed().isEmpty())
 		{
-			QMessageBox::warning(this, QStringLiteral(u"提示"), typeName+ QStringLiteral(u"不能为空！"),QStringLiteral(u"确定"));
+			QMessageBox::warning(this, QStringLiteral(u"提示"),
+				typeName + QStringLiteral(u"不能为空！"),
+				QStringLiteral(u"确定"));
 			return false;
-		}
-
-		if (str.size() > 128) 
-		{
-			QMessageBox::warning(this, QStringLiteral(u"提示"), typeName + QStringLiteral(u"不能超过128个字符！"), QStringLiteral(u"确定"));
-			return false;
-		}
-	
-		for (int i = 0; i < str.size(); i++) 
-		{
-			if (isalpha(str[i].cell())
-				|| isdigit(str[i].cell())
-				|| str[i] == '@'
-				|| str[i] == '.'
-				|| str[i] == '_'
-				|| str[i] == '-'
-				|| str[i] == '\\'
-				) 
-			{
-				continue;
-			}
-			else 
-			{
-				QMessageBox::warning(this, QStringLiteral(u"输入不合法"), 
-					QStringLiteral(u"只支持数字、大小写字母、@._-"),
-					QStringLiteral(u"确定"));
-				return false;
-			}
 		}
 		return true;
 	};
 
-	if (!checkStr(QStringLiteral(u"房间号"),ui.roomIDLineEdit->text()))
-	{
+	if (!checkNotEmpty(QStringLiteral(u"Broker 地址"), ui.brokerUrlLineEdit->text()))
 		return;
-	}
 
-	if (!checkStr(QStringLiteral(u"用户ID"), ui.userIDLineEdit->text()))
-	{
+	if (!checkNotEmpty(QStringLiteral(u"Agent ID"), ui.agentIdLineEdit->text()))
 		return;
-	}
 
-	emit sigEnterRoom(ui.roomIDLineEdit->text(),ui.userIDLineEdit->text());
+	if (!checkNotEmpty(QStringLiteral(u"Client ID"), ui.clientIdLineEdit->text()))
+		return;
+
+	emit sigStartVoiceChat(
+		ui.brokerUrlLineEdit->text().trimmed(),
+		ui.agentIdLineEdit->text().trimmed(),
+		ui.clientIdLineEdit->text().trimmed());
 }
