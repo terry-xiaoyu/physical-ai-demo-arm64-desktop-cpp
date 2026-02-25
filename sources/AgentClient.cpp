@@ -19,7 +19,7 @@ public:
         try {
             mqtt::subscribe_options subOpts;
             subOpts.set_no_local(noLocal);
-            m_client->subscribe(topic, qos, subOpts)->wait();
+            m_client->subscribe(topic, qos, subOpts);
             return true;
         } catch (const mqtt::exception& e) {
             qWarning() << "MCP subscribe error:" << e.what();
@@ -29,7 +29,7 @@ public:
 
     bool unsubscribe(const std::string& topic) override {
         try {
-            m_client->unsubscribe(topic)->wait();
+            m_client->unsubscribe(topic);
             return true;
         } catch (const mqtt::exception& e) {
             qWarning() << "MCP unsubscribe error:" << e.what();

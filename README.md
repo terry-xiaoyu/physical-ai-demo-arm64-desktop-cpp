@@ -189,12 +189,12 @@ public:
     bool subscribe(const std::string& topic, int qos, bool noLocal) override {
         mqtt::subscribe_options subOpts;
         subOpts.set_no_local(noLocal);
-        m_client->subscribe(topic, qos, subOpts)->wait();
+        m_client->subscribe(topic, qos, subOpts);
         return true;
     }
 
     bool unsubscribe(const std::string& topic) override {
-        m_client->unsubscribe(topic)->wait();
+        m_client->unsubscribe(topic);
         return true;
     }
 
