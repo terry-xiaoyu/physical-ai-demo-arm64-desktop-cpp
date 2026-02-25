@@ -76,8 +76,6 @@ void RoomMainWidget::setupView() {
 
     m_loginWidget = QSharedPointer<LoginWidget>::create(this);
     m_operateWidget = QSharedPointer<OperateWidget>::create(this);
-    toggleShowFloatWidget(false);
-    ui.sdkVersionLabel->setText(QStringLiteral(u"VolcEngineRTC v") + QString(bytertc::IRTCEngine::getSDKVersion()));
 
     // 创建灯指示器（圆形控件，通过背景色表示开/关状态）
     m_lightIndicator = new QWidget(ui.mainWidget);
@@ -93,7 +91,9 @@ void RoomMainWidget::setupView() {
         "}");
     m_lightIndicator->setToolTip(QStringLiteral(u"灯"));
     m_lightIndicator->raise();
-    m_lightIndicator->setVisible(false);
+
+    toggleShowFloatWidget(false);
+    ui.sdkVersionLabel->setText(QStringLiteral(u"VolcEngineRTC v") + QString(bytertc::IRTCEngine::getSDKVersion()));
 }
 
 void RoomMainWidget::on_closeBtn_clicked() {
