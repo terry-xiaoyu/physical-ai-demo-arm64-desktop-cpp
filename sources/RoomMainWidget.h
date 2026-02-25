@@ -102,4 +102,5 @@ private:
     bool m_isInRoom = false;
     QList<VideoWidget *> m_videoWidgetList;
     QMap<QString, VideoWidget *> m_activeWidgetMap;
+    QWidget *m_lightIndicator = nullptr;
 };

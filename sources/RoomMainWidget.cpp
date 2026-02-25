@@ -78,6 +78,22 @@ void RoomMainWidget::setupView() {
     m_operateWidget = QSharedPointer<OperateWidget>::create(this);
     toggleShowFloatWidget(false);
     ui.sdkVersionLabel->setText(QStringLiteral(u"VolcEngineRTC v") + QString(bytertc::IRTCEngine::getSDKVersion()));
+
+    // 创建灯指示器（圆形控件，通过背景色表示开/关状态）
+    m_lightIndicator = new QWidget(ui.mainWidget);
+    m_lightIndicator->setObjectName("lightIndicator");
+    m_lightIndicator->setFixedSize(50, 50);
+    m_lightIndicator->move(15, 15);
+    m_lightIndicator->setAttribute(Qt::WA_StyledBackground, true);
+    m_lightIndicator->setStyleSheet(
+        "QWidget#lightIndicator {"
+        "  background-color: #555555;"
+        "  border-radius: 25px;"
+        "  border: 3px solid #777777;"
+        "}");
+    m_lightIndicator->setToolTip(QStringLiteral(u"灯"));
+    m_lightIndicator->raise();
+    m_lightIndicator->setVisible(false);
 }
 
 void RoomMainWidget::on_closeBtn_clicked() {
@@ -115,6 +131,27 @@ void RoomMainWidget::slotOnStartVoiceChat(const QString &brokerUrl, const QStrin
 
     connect(m_agentClient, &AgentClient::voiceChatStopped,
             this, &RoomMainWidget::slotOnHangup);
+
+    connect(m_agentClient, &AgentClient::lightStateChanged,
+            this, [this](bool on) {
+        if (m_lightIndicator) {
+            if (on) {
+                m_lightIndicator->setStyleSheet(
+                    "QWidget#lightIndicator {"
+                    "  background-color: #FFD700;"
+                    "  border-radius: 25px;"
+                    "  border: 3px solid #FFA500;"
+                    "}");
+            } else {
+                m_lightIndicator->setStyleSheet(
+                    "QWidget#lightIndicator {"
+                    "  background-color: #555555;"
+                    "  border-radius: 25px;"
+                    "  border: 3px solid #777777;"
+                    "}");
+            }
+        }
+    });
 
     connect(m_agentClient, &AgentClient::errorOccurred,
             this, [this](const QString &error) {
@@ -195,6 +232,7 @@ void RoomMainWidget::toggleShowFloatWidget(bool isEnterRoom) {
     m_loginWidget->setVisible(!isEnterRoom);
     m_operateWidget->setVisible(isEnterRoom);
     ui.roomIdLabel->setVisible(isEnterRoom);
+    m_lightIndicator->setVisible(isEnterRoom);
 }
 
 void RoomMainWidget::slotOnHangup() {
@@ -202,6 +240,16 @@ void RoomMainWidget::slotOnHangup() {
     m_isInRoom = false;
 
     toggleShowFloatWidget(false);
+
+    // 重置灯指示器为关闭状态
+    if (m_lightIndicator) {
+        m_lightIndicator->setStyleSheet(
+            "QWidget#lightIndicator {"
+            "  background-color: #555555;"
+            "  border-radius: 25px;"
+            "  border: 3px solid #777777;"
+            "}");
+    }
 
     // 停止 MQTT 智能体客户端（发送 stopVoiceChat + destroySession）
     if (m_agentClient) {
