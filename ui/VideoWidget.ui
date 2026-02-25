@@ -18,23 +18,23 @@
     <number>0</number>
    </property>
    <property name="leftMargin">
-    <number>6</number>
+    <number>2</number>
    </property>
    <property name="topMargin">
-    <number>6</number>
+    <number>2</number>
    </property>
    <property name="rightMargin">
-    <number>6</number>
+    <number>2</number>
    </property>
    <property name="bottomMargin">
-    <number>6</number>
+    <number>2</number>
    </property>
    <item>
     <widget class="QWidget" name="videoCanvas" native="true">
      <property name="styleSheet">
-      <string notr="true">QWidget
-{
-	background-color:#333333;
+      <string notr="true">QWidget {
+    background-color: #0D0D1A;
+    border-radius: 4px;
 }</string>
      </property>
     </widget>
@@ -49,7 +49,7 @@
      </property>
      <layout class="QHBoxLayout" name="horizontalLayout">
       <property name="rightMargin">
-       <number>10</number>
+       <number>8</number>
       </property>
       <item>
        <spacer name="horizontalSpacer">
@@ -67,17 +67,14 @@
       <item>
        <widget class="QLabel" name="label">
         <property name="styleSheet">
-         <string notr="true">QLabel
-{
-	font-family: PingFang SC;
-	font-style: normal;
-	font-weight: normal;
-	font-size: 14px;
-	line-height: 22px;
+         <string notr="true">QLabel {
+    color: #888888;
+    font-family: PingFang SC, Arial, sans-serif;
+    font-size: 12px;
 }</string>
         </property>
         <property name="text">
-         <string>1000</string>
+         <string/>
         </property>
        </widget>
       </item>

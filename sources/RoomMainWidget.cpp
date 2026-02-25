@@ -1,61 +1,13 @@
-﻿#include <QMouseEvent>
+#include <QMouseEvent>
 #include "RoomMainWidget.h"
 #include "LoginWidget.h"
-#include "OperateWidget.h"
 #include "AgentClient.h"
 #include <QDebug>
 #include <vector>
 #include <QTimer>
 #include "VideoWidget.h"
-#include "ChatWidget.h"
 #include <QMessageBox>
-
-/**
- * VolcEngineRTC 视频通话的主页面
- * 本示例不限制房间内最大用户数；同时最多渲染四个用户的视频数据（自己和三个远端用户视频数据）；
- *
- * 包含如下简单功能：
- * - 创建引擎
- * - 设置视频发布参数
- * - 渲染自己的视频数据
- * - 创建房间
- * - 加入音视频通话房间
- * - 打开/关闭麦克风
- * - 打开/关闭摄像头
- * - 渲染远端用户的视频数据
- * - 离开房间
- * - 销毁引擎
- *
- * 实现一个基本的音视频通话的流程如下：
- * 1.创建 IRTCVideo 实例。 bytertc::IRTCVideo* bytertc::createRTCVideo(
- *                          const char* app_id,
- *                          bytertc::IRTCVideoEventHandler *event_handler,
- *                          const char* parameters)
- * 2.视频发布端设置推送多路流时各路流的参数，包括分辨率、帧率、码率、缩放模式、网络不佳时的回退策略等。
- *   bytertc::IRTCVideo::setVideoEncoderConfig(
- *       const VideoEncoderConfig& max_solution)
- * 3.开启本地视频采集。 bytertc::IRTCVideo::startVideoCapture()
- * 4.设置本地视频渲染时，使用的视图，并设置渲染模式。
- *   bytertc::IRTCVideo::setLocalVideoCanvas(
- *       StreamIndex index,
- *       const VideoCanvas& canvas)
- * 5.创建房间。IRTCRoom* bytertc::IRTCVideo::createRTCRoom(
- *               const char* room_id)
- * 6.加入音视频通话房间。bytertc::IRTCRoom::joinRoom(
- *                        const char* token,
- *                        const UserInfo& user_info,
- *                        const RTCRoomConfig& config)
- * 7.SDK 接收并解码远端视频流首帧后，设置用户的视频渲染视图。
- *   bytertc::IRTCVideo::setRemoteStreamVideoCanvas(
- *       RemoteStreamKey stream_key,
- *       const VideoCanvas& canvas)
- * 8.在用户离开房间之后移出用户的视频渲染视图。
- * 9.离开音视频通话房间。bytertc::IRTCRoom::leaveRoom()
- * 10.销毁房间。bytertc::IRTCRoom::destroy()
- * 11.销毁引擎。bytertc::destroyRTCVideo();
- *
- * 详细的API文档参见: https://www.volcengine.com/docs/6348/85515
- */
+#include <QTextCursor>
 
 RoomMainWidget::RoomMainWidget(QWidget *parent)
         : QWidget(parent) {
@@ -67,7 +19,6 @@ RoomMainWidget::RoomMainWidget(QWidget *parent)
 }
 
 void RoomMainWidget::leaveRoom() {
-
 }
 
 void RoomMainWidget::setupView() {
@@ -76,28 +27,11 @@ void RoomMainWidget::setupView() {
     m_videoWidgetList.append(ui.remoteWidget3);
 
     m_loginWidget = QSharedPointer<LoginWidget>::create(this);
-    m_operateWidget = QSharedPointer<OperateWidget>::create(this);
 
-    // 创建灯指示器（圆形控件，通过背景色表示开/关状态）
-    m_lightIndicator = new QWidget(ui.mainWidget);
-    m_lightIndicator->setObjectName("lightIndicator");
-    m_lightIndicator->setFixedSize(50, 50);
-    m_lightIndicator->move(15, 15);
-    m_lightIndicator->setAttribute(Qt::WA_StyledBackground, true);
-    m_lightIndicator->setStyleSheet(
-        "QWidget#lightIndicator {"
-        "  background-color: #555555;"
-        "  border-radius: 25px;"
-        "  border: 3px solid #777777;"
-        "}");
-    m_lightIndicator->setToolTip(QStringLiteral(u"灯"));
-    m_lightIndicator->raise();
-    m_lightIndicator->setVisible(false);
+    // lightDot needs WA_StyledBackground for stylesheet to work
+    ui.lightDot->setAttribute(Qt::WA_StyledBackground, true);
 
-    // 创建文本聊天面板（浮动在窗口右侧）
-    m_chatWidget = QSharedPointer<ChatWidget>::create(this);
-    m_chatWidget->setVisible(false);
-    toggleShowFloatWidget(false);
+    toggleCallUI(false);
     ui.sdkVersionLabel->setText(QStringLiteral(u"VolcEngineRTC v") + QString(bytertc::IRTCEngine::getSDKVersion()));
 }
 
@@ -123,11 +57,12 @@ void RoomMainWidget::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void RoomMainWidget::mouseReleaseEvent(QMouseEvent *event) {
+    Q_UNUSED(event);
     m_bLeftBtnPressed = false;
 }
 
 void RoomMainWidget::slotOnStartVoiceChat(const QString &brokerUrl, const QString &agentId, const QString &clientId) {
-    toggleShowFloatWidget(true);
+    toggleCallUI(true);
 
     m_agentClient = new AgentClient(this);
 
@@ -138,31 +73,13 @@ void RoomMainWidget::slotOnStartVoiceChat(const QString &brokerUrl, const QStrin
             this, &RoomMainWidget::slotOnHangup);
 
     connect(m_agentClient, &AgentClient::lightStateChanged,
-            this, [this](bool on) {
-        if (m_lightIndicator) {
-            if (on) {
-                m_lightIndicator->setStyleSheet(
-                    "QWidget#lightIndicator {"
-                    "  background-color: #FFD700;"
-                    "  border-radius: 25px;"
-                    "  border: 3px solid #FFA500;"
-                    "}");
-            } else {
-                m_lightIndicator->setStyleSheet(
-                    "QWidget#lightIndicator {"
-                    "  background-color: #555555;"
-                    "  border-radius: 25px;"
-                    "  border: 3px solid #777777;"
-                    "}");
-            }
-        }
-    });
+            this, &RoomMainWidget::setLightState);
 
     connect(m_agentClient, &AgentClient::errorOccurred,
             this, [this](const QString &error) {
         QMessageBox::warning(this, QStringLiteral(u"错误"), error, QStringLiteral(u"确定"));
         if (!m_isInRoom) {
-            toggleShowFloatWidget(false);
+            toggleCallUI(false);
             if (m_agentClient) {
                 m_agentClient->deleteLater();
                 m_agentClient = nullptr;
@@ -170,24 +87,11 @@ void RoomMainWidget::slotOnStartVoiceChat(const QString &brokerUrl, const QStrin
         }
     });
 
-    // 文本聊天信号连接（先断开旧连接，防止重复）
-    disconnect(m_chatWidget.get(), &ChatWidget::sigSendText, nullptr, nullptr);
-    connect(m_chatWidget.get(), &ChatWidget::sigSendText,
-            this, [this](const QString &text) {
-        if (m_agentClient && m_agentClient->isConnected()) {
-            m_agentClient->sendTextTalk(text);
-        }
-    });
-
     connect(m_agentClient, &AgentClient::textDeltaReceived,
-            this, [this](const QString &delta) {
-        m_chatWidget->appendAgentDelta(delta);
-    });
+            this, &RoomMainWidget::appendAgentDelta);
 
     connect(m_agentClient, &AgentClient::textFinished,
-            this, [this]() {
-        m_chatWidget->finishAgentMessage();
-    });
+            this, &RoomMainWidget::finishAgentMessage);
 
     m_agentClient->start(brokerUrl, agentId, clientId);
 }
@@ -195,7 +99,6 @@ void RoomMainWidget::slotOnStartVoiceChat(const QString &brokerUrl, const QStrin
 void RoomMainWidget::slotOnVoiceChatReady(const QString &appId, const QString &roomId,
                                            const QString &token, const QString &userId,
                                            const QString &targetUserId) {
-    // 使用服务端返回的 targetUserId 作为本端的 userId
     m_uid = targetUserId.toStdString();
     m_roomId = roomId.toStdString();
     m_appId = appId.toStdString();
@@ -203,7 +106,6 @@ void RoomMainWidget::slotOnVoiceChatReady(const QString &appId, const QString &r
 
     ui.roomIdLabel->setText(roomId);
 
-    // 创建引擎（使用服务端返回的 appId）
     bytertc::EngineConfig config;
     config.app_id = m_appId.c_str();
     config.parameters = "";
@@ -217,17 +119,13 @@ void RoomMainWidget::slotOnVoiceChatReady(const QString &appId, const QString &r
     conf.frame_rate = 15;
     conf.width = 360;
     conf.height = 640;
-    // 设置视频发布参数
     m_rtc_video->setVideoEncoderConfig(conf);
 
-    // 如果是空的stream_id，RTC会自动生成
     std::string stream_id = "";
 
     setRenderCanvas(true, (void *) ui.localWidget->getVideoWidget()->winId(), stream_id, m_uid);
     ui.localWidget->showVideo(m_uid.c_str());
-    // 开启本地视频采集
     m_rtc_video->startVideoCapture();
-    // 开启本地音频采集
     m_rtc_video->startAudioCapture();
 
     m_rtc_room = m_rtc_video->createRTCRoom(m_roomId.c_str());
@@ -243,7 +141,6 @@ void RoomMainWidget::slotOnVoiceChatReady(const QString &appId, const QString &r
     roomConfig.is_auto_subscribe_audio = true;
     roomConfig.is_auto_subscribe_video = true;
     roomConfig.room_profile_type = bytertc::kRoomProfileTypeCommunication;
-    // 加入房间（使用服务端返回的 token，targetUserId 作为本端 uid）
     m_rtc_room->joinRoom(tokenStr.c_str(), userInfo, true, roomConfig);
     m_isInRoom = true;
 
@@ -252,34 +149,20 @@ void RoomMainWidget::slotOnVoiceChatReady(const QString &appId, const QString &r
              << ", uid(targetUserId)=" << m_uid.c_str();
 }
 
-void RoomMainWidget::toggleShowFloatWidget(bool isEnterRoom) {
-    m_loginWidget->setVisible(!isEnterRoom);
-    m_operateWidget->setVisible(isEnterRoom);
-    ui.roomIdLabel->setVisible(isEnterRoom);
-    m_lightIndicator->setVisible(isEnterRoom);
-    m_chatWidget->setVisible(isEnterRoom);
+void RoomMainWidget::toggleCallUI(bool inCall) {
+    m_loginWidget->setVisible(!inCall);
+    ui.sidePanel->setVisible(inCall);
+    ui.controlBar->setVisible(inCall);
+    ui.roomIdLabel->setVisible(inCall);
 }
 
 void RoomMainWidget::slotOnHangup() {
-    // 先置标志位，防止排队中的跨线程信号在引擎销毁后继续操作 SDK
     m_isInRoom = false;
 
-    toggleShowFloatWidget(false);
+    toggleCallUI(false);
+    setLightState(false);
+    clearChat();
 
-    // 重置灯指示器为关闭状态
-    if (m_lightIndicator) {
-        m_lightIndicator->setStyleSheet(
-            "QWidget#lightIndicator {"
-            "  background-color: #555555;"
-            "  border-radius: 25px;"
-            "  border: 3px solid #777777;"
-            "}");
-    }
-
-    // 清空聊天记录
-    m_chatWidget->clearChat();
-
-    // 停止 MQTT 智能体客户端（发送 stopVoiceChat + destroySession）
     if (m_agentClient) {
         m_agentClient->stop();
         m_agentClient->deleteLater();
@@ -287,28 +170,29 @@ void RoomMainWidget::slotOnHangup() {
     }
 
     if (m_rtc_room) {
-        // 先摘除回调，阻止 SDK 线程继续派发新的事件到 this
         m_rtc_room->setRTCRoomEventHandler(nullptr);
-        // 离开房间
         m_rtc_room->leaveRoom();
         m_rtc_room->destroy();
         m_rtc_room = nullptr;
     }
-    // 销毁引擎
     bytertc::IRTCEngine::destroyRTCEngine();
     m_rtc_video = nullptr;
-    if (m_operateWidget)
-    {
-        m_operateWidget->reset();
-    }
+
+    // Reset mute buttons
+    ui.muteAudioBtn->blockSignals(true);
+    ui.muteAudioBtn->setChecked(false);
+    ui.muteAudioBtn->blockSignals(false);
+
+    ui.muteVideoBtn->blockSignals(true);
+    ui.muteVideoBtn->setChecked(false);
+    ui.muteVideoBtn->blockSignals(false);
 
     clearVideoView();
 }
 
 void RoomMainWidget::onRoomStateChanged(
-            const char* room_id, const char* uid, int state, const char* extra_info){
+            const char* room_id, const char* uid, int state, const char* extra_info) {
     qDebug() << "onRoomStateChanged,roomid:" << room_id << ",uid:" << uid << ",state:" << state;
-
 }
 
 void RoomMainWidget::onError(int err) {
@@ -345,21 +229,14 @@ void RoomMainWidget::setRenderCanvas(bool isLocal, void *view, const std::string
     canvas.render_mode = bytertc::RenderMode::kRenderModeFit;
 
     if (isLocal) {
-        // 设置本地视频渲染视图
         m_rtc_video->setLocalVideoCanvas(canvas);
     } else {
-        // 设置远端用户视频渲染视图
-        // bytertc::RemoteStreamKey remote_stream_key;
-        // remote_stream_key.room_id = m_roomId.c_str();
-        // remote_stream_key.user_id = user_id.c_str();
-        // remote_stream_key.stream_index = bytertc::kStreamIndexMain;
         m_rtc_video->setRemoteVideoCanvas(stream_id.c_str(), canvas);
     }
 }
 
 void RoomMainWidget::setupSignals() {
     connect(this, &RoomMainWidget::sigUserEnter, this, [=](const QString &streamID, const QString &userID) {
-        // 引擎已销毁或正在销毁，丢弃来自 SDK 线程的排队信号
         if (!m_isInRoom) {
             qDebug() << "ignore sigUserEnter after leaving room";
             return;
@@ -400,39 +277,14 @@ void RoomMainWidget::setupSignals() {
         }
     });
 
-    connect(m_operateWidget.get(), &OperateWidget::sigMuteAudio, this, [this](bool bMute) {
-        if (m_rtc_room) {
-            if (bMute) {
-                // 关闭本地音频发送
-                m_rtc_room->publishStreamAudio(false);
-            }
-            else {
-                // 开启本地音频发送
-                m_rtc_room->publishStreamAudio(true);
-            }
-        }
-    });
-
-    connect(m_operateWidget.get(), &OperateWidget::sigMuteVideo, this, [this](bool bMute) {
-        if (m_rtc_video) {
-            if (bMute) {
-                // 关闭视频采集
-                m_rtc_video->stopVideoCapture();
-            } else {
-                // 开启视频采集
-                m_rtc_video->startVideoCapture();
-            }
-            QTimer::singleShot(10, this, [=] {
-                ui.localWidget->update();
-            });
-        }
-    });
-
     connect(this, &RoomMainWidget::sigError, this, [this](int errorCode) {
         QString errorInfo = "error:";
         errorInfo += QString::number(errorCode);
-        QMessageBox::warning(this, QStringLiteral(u"提示"),errorInfo ,QStringLiteral(u"确定"));
+        QMessageBox::warning(this, QStringLiteral(u"提示"), errorInfo, QStringLiteral(u"确定"));
     });
+
+    // Enter key in input field triggers send
+    connect(ui.inputField, &QLineEdit::returnPressed, this, &RoomMainWidget::on_sendBtn_clicked);
 }
 
 void RoomMainWidget::clearVideoView() {
@@ -441,4 +293,99 @@ void RoomMainWidget::clearVideoView() {
         m_activeWidgetMap[uid]->hideVideo();
     }
     m_activeWidgetMap.clear();
+}
+
+// --- Control bar slots ---
+
+void RoomMainWidget::on_hangupBtn_clicked() {
+    slotOnHangup();
+}
+
+void RoomMainWidget::on_muteAudioBtn_clicked() {
+    bool bMute = ui.muteAudioBtn->isChecked();
+    if (m_rtc_room) {
+        m_rtc_room->publishStreamAudio(!bMute);
+    }
+}
+
+void RoomMainWidget::on_muteVideoBtn_clicked() {
+    bool bMute = ui.muteVideoBtn->isChecked();
+    if (m_rtc_video) {
+        if (bMute) {
+            m_rtc_video->stopVideoCapture();
+        } else {
+            m_rtc_video->startVideoCapture();
+        }
+        QTimer::singleShot(10, this, [=] {
+            ui.localWidget->update();
+        });
+    }
+}
+
+// --- Chat methods ---
+
+void RoomMainWidget::on_sendBtn_clicked() {
+    QString text = ui.inputField->text().trimmed();
+    if (text.isEmpty()) return;
+
+    appendUserMessage(text);
+    if (m_agentClient && m_agentClient->isConnected()) {
+        m_agentClient->sendTextTalk(text);
+    }
+    ui.inputField->clear();
+}
+
+void RoomMainWidget::appendUserMessage(const QString &text) {
+    QTextCursor cursor = ui.chatDisplay->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    if (!ui.chatDisplay->document()->isEmpty()) {
+        cursor.insertText("\n");
+    }
+    cursor.insertText(QStringLiteral(u"You: ") + text);
+    ui.chatDisplay->setTextCursor(cursor);
+    ui.chatDisplay->ensureCursorVisible();
+}
+
+void RoomMainWidget::appendAgentDelta(const QString &delta) {
+    QTextCursor cursor = ui.chatDisplay->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    if (!m_agentMessageInProgress) {
+        if (!ui.chatDisplay->document()->isEmpty()) {
+            cursor.insertText("\n");
+        }
+        cursor.insertText("Agent: ");
+        m_agentMessageInProgress = true;
+    }
+    cursor.insertText(delta);
+    ui.chatDisplay->setTextCursor(cursor);
+    ui.chatDisplay->ensureCursorVisible();
+}
+
+void RoomMainWidget::finishAgentMessage() {
+    m_agentMessageInProgress = false;
+}
+
+void RoomMainWidget::clearChat() {
+    ui.chatDisplay->clear();
+    m_agentMessageInProgress = false;
+}
+
+// --- Light helper ---
+
+void RoomMainWidget::setLightState(bool on) {
+    if (on) {
+        ui.lightDot->setStyleSheet(
+            "QWidget#lightDot {"
+            "  background-color: #FFD700;"
+            "  border-radius: 6px;"
+            "}");
+        ui.lightLabel->setText(QStringLiteral(u"灯: 开启"));
+    } else {
+        ui.lightDot->setStyleSheet(
+            "QWidget#lightDot {"
+            "  background-color: #555555;"
+            "  border-radius: 6px;"
+            "}");
+        ui.lightLabel->setText(QStringLiteral(u"灯: 关闭"));
+    }
 }
