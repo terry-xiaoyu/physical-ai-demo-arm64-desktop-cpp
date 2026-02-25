@@ -1,0 +1,65 @@
+# OS
+.DS_Store
+
+# Build outputs
+/build/
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.ninja
+*.ninja_deps
+*.ninja_log
+compile_commands.json
+
+# Qt (moc/uic/rcc)
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+
+# Qt Creator / IDE
+*.pro.user
+*.pro.user.*
+*.qmake.stash
+*.qmlproject.user
+*.qmlproject.user.*
+*.autosave
+*.creator
+*.creator.user
+
+# Binaries and libs
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.app
+
+# Logs / temp
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+
+# Packaging artifacts
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.appimage
+
+# Local config
+config.json
+
+# Generated Qt resources
+*.rcc
+
+Resources/
+VolcEngineRTC_arm64/

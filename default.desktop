@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=QuickStart_Linux_Desktop
+Exec=AppRun %F
+Icon=default
+Comment=Update VolcEngineRTC SDK
+Terminal=false
+Categories=Office
