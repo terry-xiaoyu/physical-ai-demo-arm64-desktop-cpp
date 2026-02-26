@@ -1,6 +1,10 @@
-# VolcEngineRTC ARM64 Desktop Demo (C++)
+# 物理 AI 智能体 ARM64 Client Demo (C++)
 
-基于火山引擎实时音视频 (VolcEngineRTC) Linux ARM64 SDK 的 Qt 桌面端演示工程。通过 MQTT 协议与智能体交互，发起语音会话并自动加入 RTC 房间。
+本项目是一个基于火山引擎实时音视频 (VolcEngineRTC) Linux ARM64 SDK 的 Qt 桌面端演示工程。它通过 MQTT 协议与 EMQX 的 AI 物理智能体服务交互，发起语音会话并自动加入 RTC 房间。
+
+![连接 MQTT](Resources/mqtt-config.jpg)
+
+![工具使用](Resources/tool-use.jpg)
 
 ## 使用说明
 
@@ -150,12 +154,12 @@ cp ../VolcEngineRTC_arm64/lib/*.so .
 ### 架构概览
 
 ```
-                    ┌──────────────────────┐
-                    │     MQTT Broker       │
-                    └──────┬───────────────┘
+                ┌──────────────────────┐
+                │     MQTT Broker      │
+                └──────────┬───────────┘
                            │
               ┌────────────┴────────────┐
-              │  Paho mqtt::async_client │   ← 应用自己创建和管理的 MQTT 客户端
+              │ Paho mqtt::async_client │   ← 应用自己创建和管理的 MQTT 客户端
               └────────────┬────────────┘
                            │
             ┌──────────────┼──────────────┐
@@ -163,12 +167,12 @@ cp ../VolcEngineRTC_arm64/lib/*.so .
             ▼              ▼              ▼
     ┌──────────────┐ ┌──────────┐ ┌────────────────┐
     │ AgentClient  │ │ MCP SDK  │ │  其他自定义主题  │
-    │ (智能体协议)  │ │ ($mcp-*) │ │                │
+    │(Msg Protocol)│ │ ($mcp-*) │ │                │
     └──────────────┘ └──────────┘ └────────────────┘
 ```
 
 本项目的 `AgentClient` 同时承担两个角色：
-1. **智能体客户端** — 通过 `$agent-*` 主题与智能体交互（initializeSession、startVoiceChat 等）
+1. **智能体客户端** — 实现与智能体服务端的消息协议（上图中的 Msg Protocol），通过 `$agent-*` 主题与智能体交互，处理 initializeSession、startVoiceChat 等过程。
 2. **MCP 服务器** — 通过 `$mcp-*` 主题暴露工具供智能体调用
 
 两者共享同一条 MQTT 连接，通过 `McpMqttAdapter`（`IMqttClient` 接口的适配器）将已有的 Paho 客户端桥接给 MCP SDK。
