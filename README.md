@@ -2,6 +2,29 @@
 
 基于火山引擎实时音视频 (VolcEngineRTC) Linux ARM64 SDK 的 Qt 桌面端演示工程。通过 MQTT 协议与智能体交互，发起语音会话并自动加入 RTC 房间。
 
+## 使用说明
+
+启动应用后，在登录界面填写以下信息：
+
+1. **MQTT Broker 地址** — 支持以下连接方式：
+   - `tcp://host:1883` — 普通 TCP 连接
+   - `ssl://host:8883` — TCP + TLS 加密连接
+   - `ws://host:8083/mqtt` — WebSocket 连接
+   - `wss://host:8084/mqtt` — WebSocket + TLS 加密连接
+
+   使用 `ssl://` 或 `wss://` 时，应用会自动启用 TLS 并验证服务器证书（使用系统 CA 证书库）。
+2. **Agent ID** — 智能体 ID
+3. **Client ID** — 客户端 ID（也用作 MQTT Client ID）
+
+点击 "开始语音通话" 后，应用会自动：
+1. 连接到 MQTT Broker
+2. 向智能体发送 `initializeSession` 初始化会话
+3. 发送 `startVoiceChat` 发起语音通话
+4. 从智能体的应答中获取 `appId`、`roomId`、`token`、`userId`、`targetUserId`
+5. 使用 `targetUserId` 作为本端用户 ID 加入 RTC 房间
+
+挂断时，应用会发送 `stopVoiceChat` 和 `destroySession` 给智能体，并断开 MQTT 连接。
+
 ## 平台与架构
 
 - **目标平台**: Linux aarch64 (ARM64)
@@ -10,7 +33,7 @@
 
 ## 环境要求
 
-- Linux aarch64 (ARM64) 系统，在 Ubuntu 24.04 ARM64 Desktop 上测试通过
+- Linux aarch64 (ARM64) 系统，在 [Ubuntu 24.04 Desktop ARM64](https://cdimage.ubuntu.com/releases/24.04/release/ubuntu-24.04.4-desktop-arm64.iso) 上测试通过
 - GCC/G++ (支持 C++17)
 - CMake 3.14+
 - Qt5 开发库 (Widgets, Core, Gui, Network)
@@ -21,9 +44,9 @@
 - Eclipse Paho MQTT C++ 库
 - mcp-over-mqtt-cpp-sdk（已包含在同级目录 `../mcp-over-mqtt-cpp-sdk`）
 
-### 安装依赖 (Ubuntu/Debian)
+## 安装依赖 (Ubuntu/Debian)
 
-#### 1. 系统基础依赖
+### 1. 系统基础依赖
 
 ```sh
 sudo apt update
@@ -31,7 +54,7 @@ sudo apt install build-essential cmake git qtbase5-dev qt5-qmake qtchooser \
     libssl-dev libpulse-dev nlohmann-json3-dev
 ```
 
-#### 2. 安装 Paho MQTT C 库
+### 2. 安装 Paho MQTT C 库
 
 ```sh
 git clone https://github.com/eclipse/paho.mqtt.c.git
@@ -44,7 +67,7 @@ sudo ldconfig
 cd ../..
 ```
 
-#### 3. 安装 Paho MQTT C++ 库
+### 3. 安装 Paho MQTT C++ 库
 
 ```sh
 git clone https://github.com/eclipse/paho.mqtt.cpp.git
@@ -57,7 +80,7 @@ sudo ldconfig
 cd ../..
 ```
 
-#### 4. 获取 mcp-over-mqtt-cpp-sdk
+### 4. 获取 mcp-over-mqtt-cpp-sdk
 
 将 mcp-over-mqtt-cpp-sdk 放在与本项目同级的目录下：
 
@@ -77,7 +100,7 @@ git clone https://github.com/terry-xiaoyu/mcp-over-mqtt-cpp-sdk.git
 > cmake .. && sudo make install
 > ```
 
-#### 5. 获取 VolcEngineRTC SDK
+### 5. 获取 VolcEngineRTC SDK
 
 从 https://www.volcengine.com/docs/6348/75707?lang=zh 或者火山技术团队获取 SDK 压缩包: VolcEngineRTC_Linux_3.60.103.4700_aarch64_Release.zip，然后解压到本项目根目录下：
 
@@ -107,23 +130,6 @@ export LD_LIBRARY_PATH=$(pwd)/../VolcEngineRTC_arm64/lib:$LD_LIBRARY_PATH
 cp ../VolcEngineRTC_arm64/lib/*.so .
 ./QuickStart
 ```
-
-## 使用说明
-
-启动应用后，在登录界面填写以下信息：
-
-1. **MQTT Broker 地址** — 如 `tcp://your-broker:1883`
-2. **Agent ID** — 智能体 ID
-3. **Client ID** — 客户端 ID（也用作 MQTT Client ID）
-
-点击"开始语音通话"后，应用会自动：
-1. 连接到 MQTT Broker
-2. 向智能体发送 `initializeSession` 初始化会话
-3. 发送 `startVoiceChat` 发起语音通话
-4. 从智能体的应答中获取 `appId`、`roomId`、`token`、`userId`、`targetUserId`
-5. 使用 `targetUserId` 作为本端用户 ID 加入 RTC 房间
-
-挂断时，应用会发送 `stopVoiceChat` 和 `destroySession` 给智能体，并断开 MQTT 连接。
 
 ### MCP 工具
 

@@ -115,7 +115,7 @@ QLineEdit::placeholder {
       </size>
      </property>
      <property name="placeholderText">
-      <string>MQTT Broker 地址，如 tcp://localhost:1883</string>
+      <string>tcp:// | ssl:// | ws:// | wss://</string>
      </property>
     </widget>
    </item>

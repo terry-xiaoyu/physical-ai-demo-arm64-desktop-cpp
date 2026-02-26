@@ -170,11 +170,22 @@ void AgentClient::start(const QString &brokerUrl,
         m_callbackBridge = std::make_unique<MqttCallbackBridge>(this);
         m_mqttClient->set_callback(*m_callbackBridge);
 
-        auto connOpts = mqtt::connect_options_builder()
+        auto connOptsBuilder = mqtt::connect_options_builder()
             .mqtt_version(MQTTVERSION_5)
             .clean_start(true)
-            .keep_alive_interval(std::chrono::seconds(60))
-            .finalize();
+            .keep_alive_interval(std::chrono::seconds(60));
+
+        // 为 ssl:// 和 wss:// 连接配置 TLS 选项
+        std::string url = brokerUrl.toStdString();
+        if (url.rfind("ssl://", 0) == 0 || url.rfind("wss://", 0) == 0) {
+            auto sslOpts = mqtt::ssl_options_builder()
+                .enable_server_cert_auth(true)
+                .verify(true)
+                .finalize();
+            connOptsBuilder.ssl(std::move(sslOpts));
+        }
+
+        auto connOpts = connOptsBuilder.finalize();
 
         m_mqttClient->connect(connOpts)->wait_for(std::chrono::seconds(10));
 
