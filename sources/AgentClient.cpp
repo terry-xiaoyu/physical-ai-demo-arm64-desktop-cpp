@@ -8,8 +8,9 @@
 // 使 McpServer 能复用同一条 MQTT 连接来订阅/发布 MCP 协议消息。
 class AgentClient::McpMqttAdapter : public mcp_mqtt::IMqttClient {
 public:
-    explicit McpMqttAdapter(mqtt::async_client* client, const std::string& clientId)
-        : m_client(client), m_clientId(clientId) {}
+    explicit McpMqttAdapter(mqtt::async_client* client, const std::string& clientId,
+                            const std::string& brokerUrl)
+        : m_client(client), m_clientId(clientId), m_brokerUrl(brokerUrl) {}
 
     bool isConnected() const override {
         return m_client && m_client->is_connected();
@@ -68,6 +69,26 @@ public:
         // 连接断开已由 MqttCallbackBridge 处理
     }
 
+    void setConnectProperties(uint32_t sessionExpiryInterval,
+                               const std::map<std::string, std::string>& userProperties) override {
+        m_sessionExpiryInterval = sessionExpiryInterval;
+        m_connectUserProperties = userProperties;
+        m_connectPropsSet = true;
+    }
+
+    void setWill(const std::string& topic, const std::string& payload,
+                 int qos, bool retained) override {
+        m_willTopic = topic;
+        m_willPayload = payload;
+        m_willQos = qos;
+        m_willRetained = retained;
+
+        // 若已连接则重连，以便应用 Will + Connect 属性
+        if (m_client && m_client->is_connected()) {
+            reconnect();
+        }
+    }
+
     // 由 MqttCallbackBridge 调用，将收到的消息转发给 MCP SDK
     void forwardMessage(mqtt::const_message_ptr msg) {
         mcp_mqtt::MqttMessageHandler handler;
@@ -100,10 +121,60 @@ public:
     }
 
 private:
+    void reconnect() {
+        try {
+            m_client->disconnect()->wait();
+
+            auto builder = mqtt::connect_options_builder()
+                .mqtt_version(MQTTVERSION_5)
+                .clean_start(true)
+                .keep_alive_interval(std::chrono::seconds(60));
+
+            // 应用 Will
+            if (!m_willTopic.empty()) {
+                mqtt::message willMsg(m_willTopic, m_willPayload, m_willQos, m_willRetained);
+                builder.will(willMsg);
+            }
+
+            // 应用 CONNECT 属性
+            if (m_connectPropsSet) {
+                mqtt::properties props;
+                props.add(mqtt::property(mqtt::property::SESSION_EXPIRY_INTERVAL,
+                    m_sessionExpiryInterval));
+                for (const auto& [k, v] : m_connectUserProperties) {
+                    props.add(mqtt::property(mqtt::property::USER_PROPERTY, k, v));
+                }
+                builder.properties(props);
+            }
+
+            // SSL/TLS
+            if (m_brokerUrl.rfind("ssl://", 0) == 0 || m_brokerUrl.rfind("wss://", 0) == 0) {
+                builder.ssl(mqtt::ssl_options_builder()
+                    .enable_server_cert_auth(true)
+                    .verify(true)
+                    .finalize());
+            }
+
+            m_client->connect(builder.finalize())->wait();
+        } catch (const mqtt::exception& e) {
+            qWarning() << "MCP adapter reconnect error:" << e.what();
+        }
+    }
+
     mqtt::async_client* m_client;
     std::string m_clientId;
+    std::string m_brokerUrl;
     std::mutex m_mutex;
     mcp_mqtt::MqttMessageHandler m_handler;
+    // Will message (set by SDK via setWill())
+    std::string m_willTopic;
+    std::string m_willPayload;
+    int m_willQos = 1;
+    bool m_willRetained = true;
+    // CONNECT properties (set by SDK via setConnectProperties())
+    uint32_t m_sessionExpiryInterval = 0;
+    std::map<std::string, std::string> m_connectUserProperties;
+    bool m_connectPropsSet = false;
 };
 
 // ── 内部 MQTT 回调桥接类 ───────────────────────────────────────────
@@ -160,6 +231,7 @@ void AgentClient::start(const QString &brokerUrl,
                          const QString &clientId) {
     m_agentId = agentId.toStdString();
     m_clientId = clientId.toStdString();
+    m_brokerUrl = brokerUrl.toStdString();
     m_nextRequestId = 1;
 
     try {
@@ -194,14 +266,14 @@ void AgentClient::start(const QString &brokerUrl,
             return;
         }
 
-        // 订阅智能体回复主题
+        // 启动 MCP 服务器（会调用 setConnectProperties + setWill 触发重连）
+        setupMcpServer();
+
+        // 订阅智能体回复主题（必须在 setupMcpServer 之后，因为重连会清除订阅）
         std::string subTopic = "$agent-client/" + m_clientId + "/#";
         m_mqttClient->subscribe(subTopic, 1)->wait_for(std::chrono::seconds(5));
 
         qDebug() << "MQTT connected, subscribed to:" << subTopic.c_str();
-
-        // 启动 MCP 服务器（注册灯控制等工具）
-        setupMcpServer();
 
         // 发送初始化会话
         sendInitializeSession();
@@ -331,7 +403,7 @@ void AgentClient::handleConnectionLost(const QString &reason) {
 
 void AgentClient::setupMcpServer() {
     // 创建适配器，将已有 MQTT 连接包装为 MCP SDK 接口
-    m_mcpAdapter = std::make_unique<McpMqttAdapter>(m_mqttClient.get(), m_clientId);
+    m_mcpAdapter = std::make_unique<McpMqttAdapter>(m_mqttClient.get(), m_clientId, m_brokerUrl);
     m_callbackBridge->setMcpAdapter(m_mcpAdapter.get());
 
     // 配置 MCP 服务器

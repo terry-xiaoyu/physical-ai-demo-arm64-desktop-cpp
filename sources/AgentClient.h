@@ -84,6 +84,7 @@ private:
 
     std::string m_agentId;
     std::string m_clientId;
+    std::string m_brokerUrl;
     int64_t m_nextRequestId = 1;
 
     std::string m_initSessionId;
