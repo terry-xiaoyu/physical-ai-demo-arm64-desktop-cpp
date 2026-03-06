@@ -181,80 +181,7 @@ cp ../VolcEngineRTC_arm64/lib/*.so .
 
 #### 第 1 步：实现 IMqttClient 适配器
 
-MCP SDK 通过 `IMqttClient` 接口操作 MQTT 连接。你需要将自己的 MQTT 客户端包装为该接口的实现。本项目在 `AgentClient.cpp` 中以内部类 `McpMqttAdapter` 实现：
-
-```cpp
-#include <mcp_mqtt/mcp_server.h>
-#include <mcp_mqtt/mqtt_interface.h>
-
-class McpMqttAdapter : public mcp_mqtt::IMqttClient {
-public:
-    explicit McpMqttAdapter(mqtt::async_client* client, const std::string& clientId)
-        : m_client(client), m_clientId(clientId) {}
-
-    bool isConnected() const override {
-        return m_client && m_client->is_connected();
-    }
-
-    bool subscribe(const std::string& topic, int qos, bool noLocal) override {
-        mqtt::subscribe_options subOpts;
-        subOpts.set_no_local(noLocal);
-        m_client->subscribe(topic, qos, subOpts);
-        return true;
-    }
-
-    bool unsubscribe(const std::string& topic) override {
-        m_client->unsubscribe(topic);
-        return true;
-    }
-
-    bool publish(const std::string& topic, const std::string& payload,
-                 int qos, bool retained,
-                 const std::map<std::string, std::string>& userProps) override {
-        auto msg = mqtt::make_message(topic, payload, qos, retained);
-        mqtt::properties props;
-        for (const auto& [key, value] : userProps) {
-            props.add(mqtt::property(mqtt::property::USER_PROPERTY, key, value));
-        }
-        msg->set_properties(props);
-        m_client->publish(msg);
-        return true;
-    }
-
-    std::string getClientId() const override { return m_clientId; }
-
-    void setMessageHandler(mcp_mqtt::MqttMessageHandler handler) override {
-        std::lock_guard<std::mutex> lock(m_mutex);
-        m_handler = handler;
-    }
-
-    void setConnectionLostCallback(std::function<void(const std::string&)>) override {}
-
-    // 由 MQTT 回调调用，将消息转发给 MCP SDK
-    void forwardMessage(mqtt::const_message_ptr msg) {
-        mcp_mqtt::MqttMessageHandler handler;
-        {
-            std::lock_guard<std::mutex> lock(m_mutex);
-            handler = m_handler;
-        }
-        if (!handler) return;
-
-        mcp_mqtt::MqttIncomingMessage inMsg;
-        inMsg.topic = msg->get_topic();
-        inMsg.payload = msg->to_string();
-        inMsg.qos = msg->get_qos();
-        inMsg.retained = msg->is_retained();
-        // ... 提取 MQTT 5.0 user properties ...
-        handler(inMsg);
-    }
-
-private:
-    mqtt::async_client* m_client;
-    std::string m_clientId;
-    std::mutex m_mutex;
-    mcp_mqtt::MqttMessageHandler m_handler;
-};
-```
+MCP SDK 通过 `IMqttClient` 接口操作 MQTT 连接。你需要将自己的 MQTT 客户端包装为该接口的实现。详见 `AgentClient::McpMqttAdapter` 的定义和实现。
 
 #### 第 2 步：在 MQTT 回调中转发消息
 
@@ -299,7 +226,7 @@ mcpServer.setServiceDescription("My MCP server description");
 // 启动
 mcp_mqtt::McpServerConfig config;
 config.serverId = clientId;          // 唯一标识，通常用 MQTT Client ID
-config.serverName = "my-app/tools";  // 层级式服务名
+config.serverName = "sda-{The Agent ID Here}";  // 层级式服务名
 
 mcpServer.start(adapter.get(), config);
 ```

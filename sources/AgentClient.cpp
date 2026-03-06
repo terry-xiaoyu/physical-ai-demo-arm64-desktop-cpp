@@ -450,7 +450,7 @@ void AgentClient::setupMcpServer() {
     // 启动 MCP 服务器
     mcp_mqtt::McpServerConfig mcpConfig;
     mcpConfig.serverId = m_clientId;
-    mcpConfig.serverName = "physical-ai-demo/tools";
+    mcpConfig.serverName = "sda-" + m_agentId;
 
     if (!m_mcpServer.start(m_mcpAdapter.get(), mcpConfig)) {
         qWarning() << "Failed to start MCP server";
